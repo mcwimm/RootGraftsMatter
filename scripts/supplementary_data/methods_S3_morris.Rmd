@@ -1,0 +1,508 @@
+---
+title: "Methods S3"
+author: "Wimmler et al."
+date: "May 2022"
+output: 
+   bookdown::html_document2:
+      toc: true
+      toc_float: true
+      toc_collapsed: true
+      toc_depth: 4
+      number_sections: true
+      code_folding: hide
+theme: lumen
+---
+
+```{r setup, include=FALSE}
+library(sensitivity)
+source("../../setup.R")
+library(ggrepel)
+```
+
+# Material & Methods
+
+**Input parameters**
+
+```{r inputsTab}
+inputs = data.frame("sal_ratio" = 1,
+                    "r_ratio" = 1,
+                    "h_ratio" = 1,
+                    "c_ratio" = 1,
+                    "rr_ratio" = 1,
+
+                    "dist" = 2.3,
+                    "fgraft" = 0.25,
+                    
+                    "kfsap_graft" = 1e-10,
+                    "kfsap_tree" = 1e-10,
+                    "lpkgeom" = 1e-11,
+                    
+                    # tß median geometries
+                    "rstem" = 0.1250,
+                    "hstem" = 16.30,
+                    "rcrown" = 2.5227,
+                    "rroot" = 2.5227
+                    ) 
+inputs %>% 
+   mutate(kfsap_graft = format(kfsap_graft, digits = 3)) %>% 
+   t(.) %>%
+   data.frame() %>%
+   mutate(param = names(inputs)) %>% 
+   setNames(., c("Value", "Parameter")) %>%
+   select(Parameter, Value) %>% 
+   kbl(caption = "Table: Reference value of input parameters. Ratios equal 1, that is, same size and salinity for both trees. Grafted roots related values, i.e. distance between trees and graft size factor, as well as hydraulic value equal that used in 'Fictitious Grafting'. Tree geometry values corresponds to median value of tree in study plot LOC 9.") %>%
+  kable_classic(full_width = T, html_font = "Cambria")
+```
+
+```{r}
+load(file = "../../data/input/model_trees_loc9.rda") # t9
+
+# source initial parameters
+source(file = "../../data/input/initialParameters.R")
+# source bettina ext. + morris helper functions
+source("../../scripts/functions/functions_bettina_ext_static.R")
+source("../../scripts/functions/functions_morris_methods_S3.R")
+
+```
+
+**Morris Screening**
+
+
+Morris function attributes:
+
+- repititions: 4
+- levels: 6
+
+```{r}
+rep = 4
+lev = 6
+```
+
+# Sensitivity analysis ‘Pair – same size’
+## Data
+
+```{r loadTrees}
+# load prepared La Mancha trees
+load(file = "../../data/input/model_trees_all.rda") # treesAll
+
+# select all trees from location 9
+t9 = treesAll %>% 
+   filter(LOC == 9)
+
+treeMed = t9 %>% 
+   arrange(rstem) %>% 
+   mutate(ord = 1:nrow(t9)) %>%# View()
+   filter(ord == round(0.5 * nrow(t9), 0)+1) %>% 
+   mutate(psiosmo = -85000 * 35,
+       psileaf = -7860000)
+
+```
+
+```{r inputstSame}
+inputsSame = inputs[c(1, 6:10)]
+inputsSame %>% 
+   mutate(kfsap_graft = format(kfsap_graft, digits = 3)) %>%
+   mutate(kfsap_tree = format(kfsap_tree, digits = 3)) %>%
+   mutate(lpkgeom = format(lpkgeom, digits = 3)) %>%
+   kbl(caption = "Table: Reference value of input parameters. Ratios equal 1, that is, same salinity for both trees. Grafted roots related values, i.e. distance between trees and graft size factor, as well as hydraulic value equal that used in 'Fictitious Grafting'.") %>%
+  kable_classic(full_width = T, html_font = "Cambria")
+```
+
+```{r TreeSame}
+treeMed %>% select(c(1, 5:8, 13)) %>% 
+   mutate_at(vars(4:6), round, 2) %>% 
+    kbl(caption = "Table: Reference tree for 'same size SA'. This tree correspond to the tree with median DBH in LOC 9.") %>%
+  kable_classic(full_width = T, html_font = "Cambria")
+```
+
+
+## Results
+
+```{r eval=F}
+run.morris = function(rep, lev, seed){
+   set.seed(seed)
+
+   print(paste(rep, lev, sep = "  -  "))
+   x_oat = morris(model = my_function_same,
+                  factors = names(inputsSame),
+                  r = rep,
+                  design = list(type = "oat", levels = lev, grid.jump = lev/2),
+                  scale = T,
+                  loop = T,
+                  binf = unlist(inputsSame - 0.5*inputsSame),
+                  bsup = unlist(inputsSame + 0.5*inputsSame))
+
+   # store and extract results
+   y = data.frame(x_oat[["y"]]) %>%
+      setNames(c("Rgraft", "AWG", "RWG"))
+   sim.pair = data.frame(x_oat[["X"]],
+                                y) 
+   
+   mu <- apply(x_oat$ee, 4, function(M){
+      apply(M, 2, function(x) mean(x, na.rm = T))
+   })
+   
+   mu.star <- apply(abs(x_oat$ee), 4, function(M){
+      apply(M, 2, function(x) mean(x, na.rm = T))
+   })
+   sigma <- apply(x_oat$ee, 4, function(M){
+      apply(M, 2, function(x) sd(x, na.rm = T))
+   })
+   
+   morris.pair = bind_rows(
+                     data.frame(mu) %>% mutate(morris = "mu",
+                                                  var = names(inputsSame)),
+                     data.frame(mu.star) %>% mutate(morris = "mu.star",
+                                                    var = names(inputsSame)),
+                     data.frame(sigma) %>% mutate(morris = "sigma",
+                                                  var = names(inputsSame)))
+   morris.pair = morris.pair %>%
+      gather(., output.var, output, Rgraft:RWG) %>%
+      spread(., key = morris, value = output) %>% 
+      mutate(output.var = factor(output.var,
+                                 levels = c("Rgraft", "AWG", "RWG"))) 
+   return(list(sim.pair, morris.pair))
+
+
+}
+
+
+set.seed(1)
+seeds = sample.int(10000, 10)
+print(seeds)
+sim.pair = data.frame()
+morris.pair = data.frame()
+for (s in seeds){
+   print(s)
+   r = run.morris(rep, lev, s)
+   sim.pair = rbind(sim.pair,
+                    r[[1]] %>% mutate(seed = s))
+   morris.pair = rbind(morris.pair,
+                       r[[2]] %>% mutate(seed = s))
+}
+
+save(sim.pair, 
+     file = paste("../../data/results/morris_xy_same_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = ""))
+save(morris.pair, 
+     file = paste("../../data/results/morris_ee_same_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = ""))
+```
+
+```{r}
+load(file = paste("../../data/results/morris_xy_same_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = ""))
+load(file = paste("../../data/results/morris_ee_same_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = ""))
+```
+
+
+```{r out.width="100%", fig.height=4, eval=F}
+morris.pair %>% 
+   mutate(var = factor(var,
+             levels = unique(var),
+             ordered = TRUE,
+             labels = c(expression(paste(l['gr'])),
+                        expression(paste(f['gr'])),
+                        expression(paste(k['f,gr'])),
+                        expression(paste(k['f,tree'])),
+                        expression(paste(L['P'])),
+                        expression(paste(r['salinity']))))) %>% 
+   group_by(output.var) %>% 
+   mutate(mu.star = scale(mu.star),
+          sigma = scale(sigma)) %>% 
+   group_by(var, output.var) %>% 
+   distinct(x.m = mean(mu.star), x.sd = sd(mu.star),
+            y.m = mean(sigma), y.sd = sd(sigma)) %>% 
+   filter(y.m != 0) %>% 
+
+   ggplot(., aes(x = x.m, y = y.m, col = var)) +
+   geom_point(size = 3) +
+   geom_linerange(aes(ymin = y.m-y.sd, ymax = y.m+y.sd)) +
+   geom_linerange(aes(xmin = x.m-x.sd, xmax = x.m+x.sd)) +
+   geom_text_repel(aes(label = var, col = var), size = 4, parse = T) +
+   guides(col = F) +
+   scale_color_hue() +
+   labs(x = expression(mu~'*'),
+        y = expression(sigma),
+        col = "Factor") +
+   facet_wrap(~ output.var, ncol = 3, scales = "free",
+              labeller = label_parsed) 
+# ggsave("morris_same_r4_10reps.jpg", dpi = 450,
+#        width = 9, height = 4.5)
+```
+
+```{r out.width="100%", fig.height=4}
+sds = sim.pair %>% 
+   group_by(seed) %>% 
+   distinct(AWG = sd(AWG), Rgraft = sd(Rgraft), RWG = sd(RWG)) %>% 
+   gather(., output.var, sd, AWG, Rgraft, RWG)
+
+morris.pair.new = merge(morris.pair, sds, by = c("seed", "output.var"))
+
+morris.pair.new %>% 
+   mutate(var = factor(var,
+             levels = c("dist", "fgraft","kfsap_graft",
+                        "kfsap_tree", "lpkgeom", "sal_ratio"),
+             # ordered = TRUE,
+             labels = c(expression(paste(l['gr'])),
+                        expression(paste(f['gr'])),
+                        expression(paste(k['f,gr'])),
+                        expression(paste(k['f,tree'])),
+                        expression(paste(L['P'])),
+                        expression(paste(r['salinity']))))) %>%#View()
+   group_by(output.var) %>%
+   mutate(sigma = sigma/sd,
+          mu.star = mu.star/sd) %>% 
+   group_by(var, output.var) %>% 
+   distinct(x.m = mean(mu.star), x.sd = sd(mu.star),
+            y.m = mean(sigma), y.sd = sd(sigma)) %>% 
+   filter(y.m != 0) %>% 
+
+   ggplot(., aes(x = x.m, y = y.m, col = var)) +
+   geom_point(size = 3) +
+   geom_linerange(aes(ymin = y.m-y.sd, ymax = y.m+y.sd)) +
+   geom_linerange(aes(xmin = x.m-x.sd, xmax = x.m+x.sd)) +
+   geom_text_repel(aes(label = var, col = var), size = 4, parse = T) +
+   guides(col = F) +
+   scale_color_hue() +
+   labs(x = expression(mu~'*'),
+        y = expression(sigma),
+        col = "Factor") +
+   facet_wrap(~ output.var, ncol = 3, scales = "free",
+              labeller = label_parsed) 
+# ggsave("morris_same_r4_10reps_norm.jpg", dpi = 450,
+#        width = 9, height = 4.5)
+```
+
+
+_Figure S7 Results of the Morris screening for setup ‘Same tree’ from 10 screening runs, explaining the average influence of input parameters on the resistance against water flow in the grafted roots (Rgr), absolute (AWG) and relative (RWG) water gain. µ* indicates the linear influence of input factors, while σ indicates non-linear and interactive influence. µ* and σ are normalized by diving results by the standard deviations of Rgr, AWG and RWG. Points and lines indicate the mean and standard deviation for each parameter. Input parameters are: salinity ratio (rsalinity), graft size factor (fgr), length of grafted root pipe (lgr), xylem conductivity in the grafted roots (kf,gr), xylem conductivity in trees (kf,tr), root surface permeability (LP)._
+
+
+
+# Sensitivity analysis ‘Fictitious Grafting’
+## Data
+
+- 10 trees representing the range of stem heights are selected from location 9
+
+```{r out.width="100%", fig.height=4}
+h = t9 %>% 
+   gather(., key, value, rstem:rcrown) %>% 
+   group_by(key) %>% 
+   arrange(key) %>% 
+   mutate(rank = rank(value, ties.method = "first")) 
+
+# IDs by hstem
+ids = t9 %>% 
+   arrange(hstem) %>% 
+   mutate(rank = rank(hstem, ties.method = "first")) %>% 
+   filter(rank %in% seq(1, 47, by = 5)) %>% select(ID)
+t9_by5_long = t9 %>% 
+   filter(ID %in% ids[[1]]) %>% 
+   gather(., key, value, rstem:rcrown) %>% 
+   merge(., h[, c("ID", "key", "rank")], by = c("ID", "key"))
+
+
+
+h %>% 
+   ggplot(., mapping=aes(x = rank, y = value)) +
+   geom_point() +
+   geom_point(t9_by5_long, shape = 3, col = "red", size = 3,
+              mapping=aes(x = rank, y = value)) +
+   facet_wrap(~key, scales = "free")
+```
+
+## Results
+
+
+
+```{r MorrisT9, eval=F}
+inputst9 = inputs[c(1, 6:8)]
+
+run.morris.fict = function(rep, lev, seed){
+   set.seed(seed)
+   x_oat = morris(model = my_function_fict,
+               factors = names(inputst9),
+               r = rep,
+               design = list(type = "oat", levels = lev, grid.jump = lev/2),
+               scale = TRUE,
+               loop = T,
+               binf = unlist(inputst9 - 0.5*inputst9),
+               bsup = unlist(inputst9 + 0.5*inputst9))
+         
+   # store and extract results
+   y = data.frame(x_oat[["y"]]) %>%
+      setNames(c("awg_min", "awg_var", "awg_amean", "awg_max", 
+                 "rwg_min", "rwg_var", "rwg_amean", "rwg_max"))
+   sim.fict = data.frame(x_oat[["X"]],
+                                y) 
+   
+   mu <- apply(x_oat$ee, 4, function(M){
+      # print(M)
+      apply(M, 2, function(x) mean(x, na.rm = T))
+   })
+   
+   mu.star <- apply(abs(x_oat$ee), 4, function(M){
+      apply(M, 2, function(x) mean(x, na.rm = T))
+   })
+   sigma <- apply(x_oat$ee, 4, function(M){
+      apply(M, 2, function(x) sd(x, na.rm = T))
+   })
+   
+   morris.fict = bind_rows(
+                     data.frame(mu) %>% mutate(morris = "mu",
+                                                  var = names(inputst9)),
+                     data.frame(mu.star) %>% mutate(morris = "mu.star",
+                                                    var = names(inputst9)),
+                     data.frame(sigma) %>% mutate(morris = "sigma",
+                                                  var = names(inputst9)))
+   morris.fict = morris.fict %>%
+      gather(., output.var, output, awg_min:rwg_max) %>%
+      spread(., key = morris, value = output) %>% 
+      mutate(output.var = factor(output.var,
+                                 levels = c("awg_min", "awg_var", "awg_amean", "awg_max",
+                                            "rwg_min", "rwg_var", "rwg_amean", "rwg_max"))) 
+   return(list(sim.fict, morris.fict))
+
+}
+
+
+
+
+set.seed(1)
+seeds = sample.int(10000, 10)
+print(seeds)
+sim.fict = data.frame()
+morris.fict = data.frame()
+for (s in seeds){
+   print(s)
+   r = run.morris.fict(rep, lev, s)
+   sim.fict = rbind(sim.fict,
+                    r[[1]] %>% mutate(seed = s))
+   morris.fict = rbind(morris.fict,
+                       r[[2]] %>% mutate(seed = s))
+}
+
+save(sim.fict, 
+     file = paste("../../data/results/morris_xy_fict_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = ""))
+save(morris.fict, 
+     file = paste("../../data/results/morris_ee_fict_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = ""))
+
+```
+
+```{r loadResults3}
+load(file = paste("../../data/results/morris_xy_fict_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = "")) #sim.fict
+load(file = paste("../../data/results/morris_ee_fict_r", rep, "_l", lev, "_10reps.rda", 
+                  sep = "")) #morris.fict
+```
+
+
+```{r out.width="100%", fig.height=4}
+sds = sim.fict %>% 
+   group_by(seed) %>% 
+   distinct(awg_var = sd(awg_var), rwg_var = sd(rwg_var)) %>% 
+   gather(., output.var, sd, awg_var:rwg_var)
+
+morris.fict.new = merge(morris.fict, sds, by = c("seed", "output.var"))
+
+
+morris.fict.new %>% 
+   mutate(var = factor(var,
+                       levels = c("dist", "fgraft", "kfsap_graft", "sal_ratio"),
+                       ordered = TRUE,
+                       labels = c(expression(paste(l['gr'])),
+                           expression(paste(f['gr'])),
+                           expression(paste(k['f,gr'])),
+                           expression(paste(r['salinity']))))) %>% #View()
+   filter(output.var == "awg_var" | output.var == "rwg_var") %>%
+   mutate(sigma = sigma/sd,
+          mu.star = mu.star/sd) %>%
+   mutate(output.var = factor(output.var,
+                              levels = c("awg_var", "rwg_var"),
+                              labels = c(expression(paste(sigma['AWG']^2)),
+                                         expression(paste(sigma['RWG']^2))))) %>%
+   group_by(var, output.var) %>% 
+   distinct(x.m = mean(mu.star), x.sd = sd(mu.star),
+            y.m = mean(sigma), y.sd = sd(sigma)) %>% 
+   filter(y.m != 0) %>% 
+   ggplot(., aes(x = x.m, y = y.m, col = var)) +
+   geom_point(size = 3) +
+   geom_linerange(aes(ymin = y.m-y.sd, ymax = y.m+y.sd)) +
+   geom_linerange(aes(xmin = x.m-x.sd, xmax = x.m+x.sd)) +
+   geom_text_repel(aes(label = var, col = var), size = 4, parse = T) +
+   guides(col = F) +
+   scale_color_hue() +
+   labs(x = expression(mu~'*'),
+        y = expression(sigma),
+        col = "Factor") +
+   facet_wrap(~ output.var, ncol = 3, scales = "free",
+              labeller = label_parsed) 
+# ggsave("morris_fict_10reps_norm.jpg", dpi = 450,
+#        width = 9, height = 4.5)
+```
+
+_Figure S8 Results of the Morris screening for setup ‘Fictitious Grafting’ from 10 screening runs, explaining the influence of input parameters (namely salinity ratio (rsalinity), graft size factor (fgr), length of grafted root pipe (lgr) and xylem conductivity in the grafted roots (kf,gr)) on the variance of absolute (σ²AWG) and relative (σ²RWG) water gain. µ* indicates the linear influence of input factors, while σ indicates non-linear and interactive influence. µ* and σ are normalized by diving results by the standard deviations of AWG and RWG. Points and lines indicate the mean and standard deviation for each parameter._
+
+
+```{r detailedT9, eval=F}
+inputst9_det = data.frame(#sal_ratio = c(1, 0.5, 2, 1, 1, 0.5, 2),
+                          sal_ratio = c(1, 0.5, 1.5, 1, 1, 0.5, 1.5),
+                          dist = rep(2.3, 7),
+                          fgraft = c(rep(0.25, 3), 0.5*0.25, 1.5*0.25, 0.5*0.25, 
+                                     1.5*0.25),
+                          kfsap_graft = rep(1e-10, 7)) 
+
+t9_detail = data.frame()
+for (i in c(1:nrow(inputst9_det))){
+   print(i)
+   d = my_function_t9_details(inputst9_det[i,])
+   d[, 18:21] = inputst9_det[i, ]
+   t9_detail = rbind(t9_detail, d)
+}
+
+t9_detail = t9_detail %>% rename("AWG" = "w_rg")
+save(t9_detail, file = "../../data/results/morris_fict_detail.rda")
+
+```
+
+```{r loadt9_detail}
+load(file = "../../data/results/morris_fict_detail.rda") #t9_detail
+t9_detail = t9_detail %>% 
+   mutate(sal_ratio_N = factor(sal_ratio, levels = c(0.5, 1, 1.5),
+                             labels = c(expression(paste("r"[salinity], ": 0.5")),
+                                        expression(paste("r"[salinity], ": 1")),
+                                        expression(paste("r"[salinity], ": 1.5"))))) %>% 
+   mutate(fgraft_N = factor(fgraft, levels = c(0.125, 0.25, 0.375),
+                             labels = c(expression(paste("f"[gr], ": 0.125")),
+                                        expression(paste("f"[gr], ": 0.25")),
+                                        expression(paste("f"[gr], ": 0.375")))))
+```
+
+```{r fig.height=9, warning=F, out.width="100%"}
+t9_detail %>% 
+   arrange(c_ratio) %>%
+   ggplot(., aes(x = log10(r_ratio), y = rwg,
+                 fill = log10(c_ratio))) +
+   geom_point(size = 3, shape = 21, alpha = 1) + 
+   geom_rect(data = subset(t9_detail, sal_ratio == 1 & fgraft == 0.25),
+             xmin = -Inf,xmax = Inf, col = "darkred", fill = NA, size = 2,
+             ymin = -Inf,ymax = Inf) +
+   geom_vline(xintercept = 0) +
+   geom_hline(yintercept = 0) +
+   scale_fill_gradient2(mid = "white", high = "darkblue",
+                        low = "darkred",
+                        midpoint = 0) +
+   facet_grid(sal_ratio_N ~ fgraft_N, labeller = label_parsed)  +
+   labs(x = "Logarithmic ratio of stem width",
+        y = "RWG (%)",
+        fill = "Logarithmic ratio \nof crown width") +
+      theme(text = element_text(size = 14))
+
+ggsave(filename = "FigS5_SA_scatter3.jpg", dpi = 450,
+       height = 7, width = 9)
+
+```
+
