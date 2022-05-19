@@ -1,0 +1,554 @@
+---
+title: "Analysis manuscript 'Root grafts matter for inter-tree water exchange – a quantification of water translocation between root grafted mangrove trees using field data and model based indication'"
+author: "MC Wimmler, AG Vovides, R Peters, N Nadezdina, M Walther and U Berger"
+date: "May 2022"
+output: 
+   html_document:
+      toc: true
+      toc_float: true
+      toc_collapsed: true
+      toc_depth: 4
+      number_sections: true
+      code_folding: hide
+theme: lumen
+---
+
+This document contains the R-code to generate and summarize the results of the field-based case study presented in 'Root grafts matter for inter-tree water exchange – a quantification of water translocation between root grafted mangrove trees using field data and model based indication'.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("../../setup.R")
+```
+
+```{r setupVisualization, include=F}
+fillcolors = c("#260C7D", "#007D06", "#7D410C")
+labels = list("wu" = expression(Water~uptake~(L~d^-1)),
+              "gain" = expression(Water~gain~(L~d^-1)),
+              "relGain" = "Relative water gain (%)",
+              "avail" = expression(Water~available~(L~d^-1)),
+              "abs" = expression(Water~absorbed~(L~d^-1)),
+              "sal_dist" = "Salinity (ppt) tree 1 - 2",
+              "psi_dist" = "Leaf water potential (MPa) tree 1 - 2",
+              "rstem" = "Stem radius (m)",
+              "log_c_ratio" = "Logarithmic ratio \nof crown width",
+              "log_r_ratio" = "Logarithmic ratio of stem width",
+              "log_h_ratio" = "Logarithmic ratio \nof stem height",
+              "aa_ratio" = "Ratio of available to absorbed water")
+scenarios = c("S1", "S2")
+```
+
+# Material & Methods
+## Data
+
+For the field-based case study, biometric data of black mangroves located in five study sites around the La Mancha Lagoon, Veracruz, Mexico, were used.
+
+With the help of the script *prepareLMdata.R* the properties needed for the BETTINA model and its extension were calculated.
+The simulation results were produced with scripts *setup_1.R* and *setup_2.R*.
+
+```{r}
+# Biometric data La Mancha
+load(file = "../../data/input/LMtrees.rda") # LM.trees
+load(file = "../../data/input/LMlinks.rda") # LM.links
+# Processed data as input for model
+load(file = "../../data/input/model_trees_all.rda") # treesAll
+load(file = "../../data/input/model_trees_loc9.rda") # t9
+```
+
+<br><br>
+
+## Statistical analysis
+
+**Output variables**
+
+- Water uptake of individual (non-grafted) trees $AVAIL_{ng}$ or $ABS_{ng}$ in $L d^{-1}$
+- Water uptake of grafted trees $AVAIL_{rg}$ or $ABS_{rg}$ in $L d^{-1}$
+- Absolute water gain of grafted trees $AWG$ in $L d^{-1}$
+- Relative water gain of grafted trees $RWG$ in $%$
+   - $RWG = \frac{AWG}{AVAIL_{ng}} * 100$
+- Relative water gain of trees in a group $RWG_{group}$
+   - $RWG_{group} = \sum{RWG_i}$ 
+
+
+**Independent variables**
+
+- Tree geometry non-grafted tree: stem radius $r_{stem}$, crown radius $r_{crown}$, stem height $h_{stem}$
+- Tree geometry grafted tree as logarithmic ratio focal tree:adjacent tree: ratio of stem radii $r_ratio$, ratio of crown radii $c_ratio$, ratio of stem heights $h_ratio$
+   - in setup 1 (*fictitious*): ratio is $\frac{T1}{T2}$
+   - in setup 2 (*observed*): ratio $mean (\frac{T1}{Tj})$, whereby $T1$ is the focal tree and $Tj$ are the adjacent trees
+
+**Spearman correlation**  
+... using R base function `cor.test(x, y, method = "spearman")`
+
+<br><br>
+
+# Results setup 1: *Fictitious Grafting*
+
+Setup 1 is the fictious pair-wise combination of all trees of study site 'LOC9'. Water uptake and exchange were compiled with the script *setup_1.R*.
+Study site LOC9 consists of `r nrow(t9)` _Avicennia germinan_ trees.
+
+```{r fict.load.res}
+load(file = "../../data/results/results_setup1_pairs.rda") # res.pairs
+res.pairs$wrgwu1 = res.pairs$w_rg / res.pairs$wu1 * 100
+res.pairs$wrgwu2 = res.pairs$w_rg / res.pairs$wu2 * 100
+
+res.pairs = res.pairs %>% 
+   mutate(Sname = ifelse(S == "S1", "S1: homogenous", "S2: heterogeneous"))
+```
+
+## Individual water uptake without exchange
+
+```{r fict.ind.wu}
+t9 = merge(t9, res.pairs %>% 
+               group_by(S) %>% 
+               distinct(S, ID2, wu2), by.x = "ID", by.y = "ID2") 
+t9$S = factor(t9$S, levels = scenarios)
+
+t9 %>%
+   group_by(S) %>%
+   distinct(min = min(wu2), mean = mean(wu2), max = max(wu2)) %>% ungroup() %>% 
+   mutate_if(is.numeric, round, 1) %>% 
+   mutate(`Salinity (ppt)` = c(35, 40)) %>% 
+   arrange(S) %>%
+   kbl(caption = "Table: Summary of individual tree water uptake (L/d) of tree T2 for both scenarios.") %>%
+   kable_classic(full_width = F, html_font = "Cambria") 
+```
+
+
+**Spearman correlation**
+
+```{r fict.ind.cor, warning=F}
+t9.S1 = t9 %>% filter(S == "S1")
+t9.S2 = t9 %>% filter(S == "S2")
+
+h = cor.test(t9.S1$hstem, t9.S1$wu2, method = "spearman")
+r = cor.test(t9.S1$rstem, t9.S1$wu2, method = "spearman")
+c = cor.test(t9.S1$rcrown, t9.S1$wu2, method = "spearman")
+
+h2 = cor.test(t9.S2$hstem, t9.S2$wu2, method = "spearman")
+r2 = cor.test(t9.S2$rstem, t9.S2$wu2, method = "spearman")
+c2 = cor.test(t9.S2$rcrown, t9.S2$wu2, method = "spearman")
+
+data.frame(var = c("hstem", "rstem", "rcrown"),
+           rho = c(h$estimate, r$estimate, c$estimate),
+           p = c(h$p.value, r$p.value, c$p.value),
+           rho2 = c(h2$estimate, r2$estimate, c2$estimate),
+           p2 = c(h2$p.value, r2$p.value, c2$p.value)) %>% 
+   mutate_if(is.numeric, round, 3) %>% 
+   kbl(caption = "Table: Spearman's Rho to test the correlation between individual water uptake (WU) and tree geometry.") %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>% 
+   add_header_above(c("", "S1: homogenous" = 2, "S2: heterogeneous" = 2))
+
+```
+
+<br><br>
+
+## Water exchange between pairs of grafted trees
+
+```{r include=F}
+res.pairs.long = res.pairs %>%
+   gather(., key, value, wu1, wu2) %>% 
+   mutate(wrg = ifelse(key == "wu1", w_rg, -w_rg),
+          wrgwu = ifelse(key == "wu1", w_rg/value, -w_rg/value),
+          key = ifelse(key == "wu1", "T1", "T2")) %>%   
+   mutate(rag_ratio_b = ifelse(rag_ratio >= 1, "\U2265 1", "< 1")) 
+
+```
+
+### Statistics
+
+```{r fict.icc}
+TRANSFER_0 = lmer(w_rg ~ 1 + (1 | S), data = res.pairs)
+# summary(TRANSFER_0)
+ICC = 0.09666 / (0.05742 + 0.09666) # = Var(S) / (Var(Residual) + Var(S))
+```
+
+Difference between scenarios: `r round(ICC, 2)*100` % of the variability in $AWG$ are explained by between-scenario difference (ICC).
+
+```{r fict.summary.table}
+res.pairs.long %>% 
+   rename('Tree' = 'key') %>% 
+   mutate(wrgwu = wrgwu*100) %>% 
+
+   group_by(Sname, Tree) %>% 
+   distinct(min.AWG = min(wrg), mean.AWG = mean(wrg), max.AWG = max(wrg),
+            min.RWG = min(wrgwu), mean.RWG = mean(wrgwu), max.RWG = max(wrgwu)) %>% 
+   ungroup() %>% 
+   mutate_if(is.numeric, round, 2) %>%
+   arrange(Sname) %>% 
+   rename('Scenario' = 'Sname') %>% 
+   mutate(sal = c(35, 35, 35, 40))   %>% 
+   `colnames<-`(c("Scenario", "Tree", "min", "mean", "max",
+                  "min", "mean", "max", "Salinity (ppt)")) %>% 
+   kbl(caption = "Table: Summary statistics of absolute water gain (AWG) in L per day.") %>%
+   kable_classic(full_width = F, html_font = "Cambria") %>% 
+   row_spec(c(1,2), bold = F, background = "#e0dede") %>% 
+   add_header_above(c(" " = 2, "AWG" = 3, "RWG" = 3, " " = 1))
+```
+
+
+<br>
+
+```{r fict.cor, warning=F}
+res.pairs.S1 = res.pairs %>% filter(S == "S1")
+res.pairs.S2 = res.pairs %>% filter(S == "S2")
+
+h = cor.test(log10(res.pairs.S1$h_ratio), res.pairs.S1$w_rg, method = "spearman")
+r = cor.test(log10(res.pairs.S1$r_ratio), res.pairs.S1$w_rg, method = "spearman")
+c = cor.test(log10(res.pairs.S1$c_ratio), res.pairs.S1$w_rg, method = "spearman")
+wu1 = cor.test(res.pairs.S1$wu1, res.pairs.S1$w_rg, method = "spearman")
+wrgwu1 = cor.test(res.pairs.S1$wrgwu1, res.pairs.S1$w_rg, method = "spearman")
+
+h2 = cor.test(log10(res.pairs.S2$h_ratio), res.pairs.S2$w_rg, method = "spearman")
+r2 = cor.test(log10(res.pairs.S2$r_ratio), res.pairs.S2$w_rg, method = "spearman")
+c2 = cor.test(log10(res.pairs.S2$c_ratio), res.pairs.S2$w_rg, method = "spearman")
+wu12 = cor.test(res.pairs.S2$wu1, res.pairs.S2$w_rg, method = "spearman")
+wrgwu12 = cor.test(res.pairs.S2$wrgwu1, res.pairs.S2$w_rg, method = "spearman")
+
+pairs.rho = data.frame(
+         var = c("log10 h_ratio", "log10 r_ratio", "log10 c_ratio", 
+                   "WU", "RWG"),
+         rho = c(h$estimate, r$estimate, c$estimate,
+                 wu1$estimate, wrgwu1$estimate),
+         p = c(h$p.value, r$p.value, c$p.value,
+               wu1$p.value, wrgwu1$p.value),
+         rho2 = c(h2$estimate, r2$estimate, c2$estimate,
+                  wu12$estimate, wrgwu12$estimate),
+         p2 = c(h2$p.value, r2$p.value, c2$p.value,
+                wu12$p.value, wrgwu12$p.value)) %>% 
+   mutate_at(c(3,5), round, 4) %>% 
+   mutate_at(c(2,4), round, 2) %>% 
+   mutate(key = c("h_ratio", "r_ratio", "c_ratio", "WU", "RWG"))
+
+pairs.rho %>% 
+   select(-key) %>% 
+   kbl(caption = "Table: Spearman's Rho to test the correlation between absolute water gain (AWG) and the logarithmic difference in tree geometry (T1:T2) as well as relative water gain (RWG) and individual tree water uptake.") %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>% 
+   add_header_above(c("", "Scenario S1" = 2, "Scenario S2" = 2))
+
+```
+
+```{r eval=F}
+pairs.rho.long = pairs.rho %>% 
+   filter(key != "WU" & key != "RWG") %>% 
+   rename("S1" = "rho", "S2" = "rho2") %>% 
+   gather(., S, rho, S1, S2) %>% 
+   mutate(rho = round(rho, 2)) %>% 
+   mutate(Sname = ifelse(S == "S1", "S1: homogenous", "S2: heterogeneous")) %>% 
+   mutate(key = factor(key, levels = c("h_ratio", "r_ratio", "c_ratio"))) 
+
+# save(pairs.rho.long, file = "../../data/results/pairs_rho_long.rda")
+```
+
+
+<br>
+
+### Figures
+
+```{r fict.fig3, echo=F, out.width="100%"}
+upperLeft = readPNG("../../data/input/big2small.png")
+
+p1 = res.pairs.long %>%
+   filter(key == "T1") %>%
+   ggplot(., aes(x= log10(r_ratio), fill = log10(h_ratio),
+                 y = wrg, shape = factor(rag_ratio_b))) +
+      annotation_raster(upperLeft, xmin = -1, xmax = 1, ymin = -1.7, ymax = 1) +
+
+      geom_point(size = 3) + 
+      scale_shape_manual(values = c(21, 22)) +
+      geom_vline(xintercept = 0) +
+      geom_hline(yintercept = 0) +
+      scale_fill_gradient2(mid = "white", high = "darkblue",
+                           low = "darkred",
+                           midpoint = 0) +
+      facet_grid(key ~ Sname) +
+      labs(x = "", #x = labels[["log_r_ratio"]],
+           y = expression(AWG~(L~d^{-1})),
+           shape = "Ratio of above-graft \nxylem resistance... ",
+           fill = labels[["log_h_ratio"]]) +
+   theme(text = element_text(size = 14))
+
+p2 = res.pairs.long %>%
+   ggplot(., aes(x= log10(r_ratio), fill = log10(h_ratio),
+              y = wrgwu*100, shape = factor(rag_ratio_b))) +
+   geom_point(size = 3) +
+   scale_shape_manual(values = c(21, 22)) +
+   geom_vline(xintercept = 0) +
+   geom_hline(yintercept = 0) +
+   scale_fill_gradient2(mid = "white", high = "darkblue",
+                        low = "darkred",
+                        midpoint = 0) +
+   facet_grid(key ~ Sname) +
+   labs(x = labels[["log_r_ratio"]],
+        y = "RWG (%)",
+        shape = "Ratio of above-graft \nxylem resistance... ",
+        fill = labels[["log_h_ratio"]]) +
+   theme(text = element_text(size = 14))
+
+ggarrange(p1, p2, nrow = 2, ncol = 1, labels = c("(a)", "(b)"),
+          common.legend = T, legend = "bottom", heights = c(0.4, 0.6))
+# ggsave(filename = "../figures/Fig4_img_hratio.eps",# dpi = 450,
+#        height = 8, width = 9)
+```
+
+*Fig. 3 Calculated water flow patterns of trees T1 and T2 in setup ‘Fictitious Grafting’ as (a) absolute water gain (AWG) of tree T1 in liter per day and (b) relative water gain (RWG) of trees T1 and T2 (percentage of water uptake of the non-grafted tree version). Pictograms in (a) represent trees T1 and T2, whereby the size of the circle indicates which tree is greater or smaller in stem radius, and the arrow indicates the direction of water flow. Ratios of biometric measures are logarithmic and given from the perspective of T1. That is, if the respective value is greater than 0, this parameter is greater for T1 than for T2. Setup ’Fictitious Grafting’.*
+
+
+<br>
+
+```{r fict.skewness, echo=F}
+t = res.pairs.long %>% group_by(Sname, key) %>%
+   distinct(s = round(e1071::skewness(wrgwu, type = 1), 2),
+            k = round(e1071::kurtosis(wrgwu, type = 1), 2)) %>% 
+   arrange(Sname)
+```
+
+<br>
+
+```{r fict.fig4, echo=F}
+res.pairs.long %>% 
+   ggplot(., aes(x = wrgwu*100,
+                 col = factor(key), fill = key, 
+                 linetype = factor(key))) +
+   geom_density(alpha = 0.6, size = 0.75) +
+   geom_rug(aes(col = key)) +
+   geom_text(t, mapping=aes(x = 10, y = c(0.3, 0.25, 0.3, 0.25),  
+                            label = paste("s = ", s, sep = "")),
+             hjust = 0, alpha = 1, show.legend = FALSE) +
+   facet_wrap(~ Sname, ncol = 2) +
+   scale_color_manual(values = c("#85d483", "#83b1d4")) +
+   scale_fill_manual(values = c("#85d483", "#83b1d4")) +
+   labs(col = "Tree", fill = "Tree", linetype = "Tree",
+        x = "RWG (%)") +
+   theme(text = element_text(size = 14))
+# ggsave(filename = "../figures/Fig5.svg",# dpi = 450,
+#          height = 4.5, width = 9)
+```
+
+
+*Fig. 4 Density estimates of relative water gain (RWG) of trees T1 and T2, setup ’Fictitious Grafting’. In scenario S1, both trees have a porewater salinity of 35 ppt. In scenario S2, tree T1 and tree T2 have a porewater salinity of 35 ppt and 40 ppt, respectively.*
+
+
+<br><br>
+
+# Results setup 2: *Observed Grafting*
+
+Setup 2 represents the actual combinations of grafted trees in La Mancha. Water uptake and exchange were compiled with the script *setup_2.R*.
+
+```{r obs.load, echo=F}
+load(file = "../../data/results/results_setup2_trees.rda") # res.trees.S12
+load(file = "../../data/results/results_setup2_links.rda") # res.links.S12
+
+res.trees.S12 = res.trees.S12 %>% 
+   mutate(Sname = ifelse(S == "S1", "S1: homogenous", "S2: heterogeneous"))
+res.links.S12 = res.links.S12 %>% 
+   mutate(Sname = ifelse(S == "S1", "S1: homogenous", "S2: heterogeneous"))
+```
+
+
+## Water uptake without exchange
+
+```{r obs.ind.wu, echo=F}
+res.trees.S12 %>% 
+   group_by(S) %>% 
+   distinct(min = min(wu), mean = mean(wu), max = max(wu)) %>% ungroup() %>% 
+   mutate_at(2, round, 2) %>% 
+   mutate_at(c(3, 4), round, 1) %>% 
+   arrange(S) %>% 
+   kbl(caption = "Table: Summary statistics of water uptake of the non-grafted tree.") %>%
+   kable_classic(full_width = F, html_font = "Cambria")
+```
+
+<br><br>
+
+## Water exchange between actual grafted trees
+
+```{r include=F}
+res.trees.S12$wrgwu = res.trees.S12$wrg / res.trees.S12$wu * 100
+res.trees.S1 = res.trees.S12 %>% filter(S == "S1")
+res.trees.S2 = res.trees.S12 %>% filter(S == "S2")
+```
+
+### Statistics
+
+```{r obs.stats, echo=F}
+res.trees.S12 %>% 
+   group_by(S) %>% 
+   distinct(min.AWG = min(wrg), mean.AWG = mean(wrg), max.AWG = max(wrg), 
+            min.RWG = min(wrgwu), mean.RWG = mean(wrgwu), max.RWG = max(wrgwu)) %>% 
+   ungroup() %>% 
+   mutate_if(is.numeric, round, 2) %>% 
+   arrange(S) %>% data.frame(.) %>% 
+   `colnames<-`(c("Scenario", "min", "mean", "max",
+                  "min", "mean", "max")) %>% 
+   kbl(caption = "Table: Summary statistics of absolute and relative water gain.") %>%
+   kable_classic(full_width = F, html_font = "Cambria") %>%
+   add_header_above(c(" " = 1, "AWG" = 3, "RWG" = 3))
+```
+
+<br>
+
+```{r obs.cor, warning=F}
+h = cor.test(log10(res.trees.S1$h_ratio), res.trees.S1$wrg, method = "spearman")
+r = cor.test(log10(res.trees.S1$r_ratio), res.trees.S1$wrg, method = "spearman")
+c = cor.test(log10(res.trees.S1$c_ratio), res.trees.S1$wrg, method = "spearman")
+wu1 = cor.test(res.trees.S1$wu, res.trees.S1$wrg, method = "spearman")
+wrgwu1 = cor.test(res.trees.S1$wrgwu, res.trees.S1$wrg, method = "spearman")
+
+h2 = cor.test(log10(res.trees.S2$h_ratio), res.trees.S2$wrg, method = "spearman")
+r2 = cor.test(log10(res.trees.S2$r_ratio), res.trees.S2$wrg, method = "spearman")
+c2 = cor.test(log10(res.trees.S2$c_ratio), res.trees.S2$wrg, method = "spearman")
+wu12 = cor.test(res.trees.S2$wu, res.trees.S2$wrg, method = "spearman")
+wrgwu12 = cor.test(res.trees.S2$wrgwu, res.trees.S2$wrg, method = "spearman")
+sal2 = cor.test(log10(res.trees.S2$sal_ratio), res.trees.S2$wrg, method = "spearman")
+
+data.frame(var = c("log10 h_ratio", "log10 r_ratio", "log10 c_ratio", "log10 sal_ratio",
+                   "WU", "RWG"),
+           rho = c(h$estimate, r$estimate, c$estimate, NA, wu1$estimate, wrgwu1$estimate),
+           p = c(h$p.value, r$p.value, c$p.value, NA, wu1$p.value, wrgwu1$p.value),
+           rho2 = c(h2$estimate, r2$estimate, c2$estimate, sal2$estimate,
+                    wu12$estimate, wrgwu12$estimate),
+           p2 = c(h2$p.value, r2$p.value, c2$p.value, sal2$p.value,
+                  wu12$p.value, wrgwu12$p.value)) %>% 
+   mutate_if(is.numeric, round, 3) %>% 
+   kbl(caption = "Table: Spearman's Rho to test the correlation between absolute water gain (AWG) and the logarithmic difference in tree geometry (T1:T2) as well as relative water gain (RWG) and individual tree water uptake.") %>%
+   kable_classic(full_width = T, html_font = "Cambria") %>% 
+   add_header_above(c("", "Scenario S1" = 2, "Scenario S2" = 2))
+
+```
+
+<br>
+
+### Figures
+
+
+```{r obs.fig5, echo=F, warning=F, out.width="100%"}
+gIDs = c("10_8", "9_35", "9_20")
+ty = res.trees.S12 %>% 
+   filter(groupID %in% gIDs)  %>% 
+   filter(S == "S1") %>% 
+   group_by(groupID) %>% 
+   distinct(ID, xn = x - min(x), yn = y - min(y),
+            rstem, hstem, rcrown, wrg, wu, groupID) %>% 
+   mutate(xn = sqrt(2*xn^2), yn = sqrt(2*yn^2)) %>% 
+   mutate(groupID = factor(groupID, levels = gIDs)) %>% 
+   mutate(groupID = ifelse(groupID == "10_8", "Group of 2",
+                           ifelse(groupID == "9_35", "Group of 3", "Group of 6")))
+
+l = res.links.S12[res.links.S12$groupID %in% gIDs, ] %>% 
+   filter(S == "S1") %>% 
+   merge(., ty[, c("ID", "xn", "yn")], by.x = "ID1", by.y = "ID") %>%
+   merge(., ty[, c("ID", "xn", "yn")], by.x = "ID2", by.y = "ID",
+         suffix = c(1, 2)) %>% 
+   mutate(groupID = ifelse(groupID == "10_8", "Group of 2",
+                           ifelse(groupID == "9_35", "Group of 3", "Group of 6")))
+
+ty %>%
+   ggplot(.) +
+   geom_segment(l, col = "#822204", alpha = 0.9, size = 1.2, 
+                mapping=aes(x = xn1+5, y = yn1,
+                            xend = xn2+5, yend = yn2)) +
+   geom_point(col = "#822204", alpha = 0.9, size = 3,
+              mapping=aes(x = xn+5, y = yn)) +
+   geom_segment(aes(x = xn+5, xend = xn+5, y = yn, yend = yn+hstem,
+                    size = rstem), alpha = 0.8, col = "#36231d") +
+   geom_circle(aes(x0 = xn+5, y0 = hstem+yn, r = rcrown, 
+                   fill = wrg/wu*100, col = wrg/wu*100), alpha = 0.8) + #, col = "#423b3b"
+   geom_label(ty, mapping=aes(x = xn+5, y = yn+hstem+1,
+                  label = paste(round(wrg, 1), ' L', #'d'^{-1}))), 
+                                '\n ~', round(wrg/wu*100, 1), ' %', sep = "")),
+              parse = F, alpha = 0.6, check_overlap = TRUE) +
+   facet_wrap(~ groupID, scales = "free_x") +
+   scale_fill_gradient2(low = "darkred", high = "darkblue", 
+                        mid = "white") +
+   scale_color_gradient2(low = "darkred", high = "darkblue", 
+                        mid = "white") +
+   labs(x = "x coordinate", y = "Height (m)",
+        fill = "Relative water gain (%)",
+        col = "Relative water gain (%)",
+        size = "Stem radius (m)") +
+   theme_classic() +
+   theme(text = element_text(size = 14),
+         legend.position = "bottom",
+         legend.box.just = "left")
+# ggsave(filename = "../figures/Fig6.svg", #dpi = 900,
+#        width = 9, height = 4.5)
+# ggsave(filename = "../figures/Fig6.eps",# dpi = 450,
+#          height = 4.5, width = 9)
+```
+
+
+*Fig. 5 Schematic representation of three groups consisting of two, three and of six grafted trees. The numbers indicate the absolute (AWG) and relative (RWG) water gain, respectively. The color indicates the RWG (%). Both calculated with homogenous salinity distribution (i.e. scenario S1). Setup ‘Observed Grafting’.*
+
+<br>
+
+```{r obs.fig6, echo=F, out.width="100%"}
+res.trees.S12 = res.trees.S12 %>%
+   mutate(GAIN = factor(ifelse(wrg > 0, "Y", "N"), 
+                        levels = c("Y", "N")),
+          AVAIL = factor(ifelse(wout/wu > 1, "Y", "N"), 
+                         levels = c("Y", "N")),
+          ABSORB = factor(ifelse(win/wu > 1, "Y", "N"), 
+                          levels = c("Y", "N")),
+          AV_AB = factor(ifelse(wout/win > 1, "Y", "N"), 
+                         levels = c("Y", "N"))) %>% 
+   mutate(woutwu = (wout/wu - 1) * 100,
+          wrgwu = wrg/wu * 100)
+
+tS = res.trees.S12 %>% group_by(Sname, GAIN) %>% 
+   distinct(s = round(e1071::skewness(wrgwu, type = 1), 2),
+            k = round(e1071::kurtosis(wrgwu, type = 1), 2)) %>% 
+   arrange(Sname) %>% 
+   mutate(GAIN = ifelse(GAIN == "Y", "gain", "loss"))
+
+p1 = res.trees.S12 %>% 
+      # filter(gs > 2) %>% 
+   mutate(GAIN = ifelse(GAIN == "Y", "gain", "loss")) %>% 
+   mutate(GAIN = factor(GAIN, levels = c("gain", "loss"))) %>%
+   mutate(wrgwu = abs(wrgwu)) %>% 
+   ggplot(., aes(x = wrgwu, fill = GAIN, 
+                 col = GAIN, linetype = GAIN)) + 
+      geom_density(alpha = 0.6, size = 0.75) +
+      geom_text(tS, mapping=aes(x = 5, y = c(0.3, 0.35, 0.3, 0.35),  
+                             label = paste("s = ", abs(s), sep = "")),
+             hjust = 0, show.legend = FALSE) +
+      geom_rug(aes(y = 0, col = GAIN), sides = "b",
+               position = position_jitter(height = 0)) +
+      facet_wrap(~ Sname, ncol = 2) +
+      scale_fill_manual(values = c("#85d483", "#83b1d4")) +
+      scale_color_manual(values = c("#85d483", "#83b1d4")) +
+      labs(col = "Water balance", fill = "Water balance", 
+           linetype = "Water balance", 
+           x = "|RWG| (%)") +
+   theme(text = element_text(size = 14))
+    
+
+p2 = res.trees.S12 %>%
+      # filter(gs > 2) %>% 
+   group_by(Sname, groupID, rep) %>% 
+   distinct(sumWrgwu = sum(wrgwu)) %>% 
+   mutate(GAIN = ifelse(sumWrgwu >= 0, "gain", "loss")) %>% 
+   mutate(GAIN = factor(GAIN, levels = c("gain", "loss"))) %>% 
+   mutate(sumWrgwu = abs(sumWrgwu)) %>%
+   ggplot(., aes(x = sumWrgwu, fill = GAIN, col = GAIN, 
+                 linetype = GAIN)) + 
+      geom_density(alpha = 0.6, size = 0.75) +
+      geom_rug(aes(y = 0, col = GAIN), sides = "b",
+               position = position_jitter(height = 0)) +
+      facet_wrap(~ Sname) +
+      scale_fill_manual(values = c("#85d483", "#83b1d4")) +
+      scale_color_manual(values = c("#85d483", "#83b1d4")) +
+      labs(col = "Water balance", fill = "Water balance", 
+           linetype = "Water balance", 
+           x = expression("|RWG"['group']~"| (%)")) +
+   theme(text = element_text(size = 14))
+
+ggarrange(p1, p2, ncol = 2, common.legend = T, align = "hv",
+          labels = c("(a)", "(b)"), legend = "bottom")
+
+# ggsave(filename = "../figures/Fig7.svg", #, dpi = 450
+#        width = 9, height = 3.5)
+# ggsave(filename = "../figures/Fig7.eps",# dpi = 450,
+#          height = 4.5, width = 9)
+```
+
+*Fig. 6 Density estimate of relative water gain (RWG) for (a) individual trees and (b) groups, shown as absolute values. The color indicates whether the tree gained or lost water, i.e. had more water available than it absorbed. The values give the skewness of the distribution of RWG. Setup ‘Observed Grafting’.*
