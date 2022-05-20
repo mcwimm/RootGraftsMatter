@@ -344,7 +344,7 @@ morris.theo.new %>%
         col = "Input parameter") +
    guides(col = F) 
 
-# ggsave(filename = "../figures/FigS7_R_morris.jpg", dpi = 450,
+# ggsave(filename = "fig_S13.jpg", dpi = 450,
 #        height = 3, width = 7)
 ```
 

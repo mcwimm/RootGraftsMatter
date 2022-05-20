@@ -271,8 +271,8 @@ morris.pair.new %>%
         col = "Factor") +
    facet_wrap(~ output.var, ncol = 3, scales = "free",
               labeller = label_parsed) 
-# ggsave("morris_same_r4_10reps_norm.jpg", dpi = 450,
-#        width = 9, height = 4.5)
+ggsave("fig_S7.jpg", dpi = 450,
+       width = 9, height = 4.5)
 ```
 
 
@@ -440,8 +440,8 @@ morris.fict.new %>%
         col = "Factor") +
    facet_wrap(~ output.var, ncol = 3, scales = "free",
               labeller = label_parsed) 
-# ggsave("morris_fict_10reps_norm.jpg", dpi = 450,
-#        width = 9, height = 4.5)
+ggsave("fig_S8.jpg", dpi = 450,
+       width = 9, height = 4.5)
 ```
 
 _Figure S8 Results of the Morris screening for setup ‘Fictitious Grafting’ from 10 screening runs, explaining the influence of input parameters (namely salinity ratio (rsalinity), graft size factor (fgr), length of grafted root pipe (lgr) and xylem conductivity in the grafted roots (kf,gr)) on the variance of absolute (σ²AWG) and relative (σ²RWG) water gain. µ* indicates the linear influence of input factors, while σ indicates non-linear and interactive influence. µ* and σ are normalized by diving results by the standard deviations of AWG and RWG. Points and lines indicate the mean and standard deviation for each parameter._
