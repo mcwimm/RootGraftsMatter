@@ -1,9 +1,9 @@
 # RootGraftsMatter
 
 
-This repository contains data and analysis of the manuscript entitled "Root grafts matter for inter-tree water exchange – a quantification of water translocation between root grafted mangrove trees using field data and model based indication" accepted for publication by Annals of Botany.
+This repository contains data and analysis of the manuscript entitled ["Root grafts matter for inter-tree water exchange – a quantification of water translocation between root grafted mangrove trees using field data and model-based indications"](https://doi.org/10.1093/aob/mcac074) published Annals of Botany (Volume 130, Issue 3, 2022).
 
-Co-Authored by: MC Wimmler, AG Vovides, R Peters, N Nadezdina, M Walther and U Berger
+Co-Authored by: MC Wimmler, AG Vovides, R Peters, M Walther, N Nadezdina, and U Berger
 
 The following lines briefly describe the files included in this repository.
 
